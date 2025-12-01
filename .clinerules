@@ -1,0 +1,12 @@
+# System Rules
+
+## Environment Constraints
+1. **Environment Recognition**: The current environment is Windows PowerShell.
+2. **Command Chaining**: STRICTLY PROHIBITED to use `&&` operator. PowerShell 5.1 does not support it and it causes syntax errors. Use `;` or execute commands sequentially in separate tool calls.
+
+## Communication Standards
+1. **Summary Style**: All task summaries must use a structured, high-clarity Markdown format.
+   - Use **Emoji Icons** for section headers (e.g., ✅ Task Completed, 🎯 Goals, 🛠️ Changes, 🚀 Results, 📝 Test Suggestions).
+   - Use **Bold Headers** to distinguish sections.
+   - Use **Lists** and **Highlighted Code** (`code`) for details.
+   - Ensure the tone is professional, structured, and easy to scan.
