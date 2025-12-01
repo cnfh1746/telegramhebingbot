@@ -3,7 +3,7 @@ import os
 import shutil
 import threading
 from flask import Flask
-from telegram import Update
+from telegram import Update, InputMediaPhoto, InputMediaVideo
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 import config
 import merger
@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 
 # 临时存储用户数据 (实际生产中建议使用 Redis)
-# 结构: {user_id: {'mode': 'vertical', 'files': ['path1', 'path2']}}
+# 结构: {user_id: {'mode': 'album', 'files': ['path1', 'path2']}}
 user_data = {}
 
 # === 保活 Web Server ===
@@ -42,12 +42,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """响应 /start 命令"""
     await update.message.reply_text(
         "👋 欢迎使用合并机器人！\n\n"
-        "我可以帮你把多张图片拼成长图，或者把多个视频拼接在一起。\n\n"
         "🛠 **使用说明**:\n"
-        "1. 发送 /vertical (默认) 或 /horizontal 设置拼接方向\n"
-        "2. 直接发送图片或视频给我 (请勿混合发送)\n"
-        "3. 发送 /end 开始合并\n"
-        "4. 发送 /clear 清空当前队列"
+        "1. **默认模式**: 直接发送多张图片/视频，我把它们打包成一个相册发送。\n"
+        "2. **拼接模式**: 发送 /vertical (垂直) 或 /horizontal (水平) 可切换到长图拼接模式。\n"
+        "3. 发送 /end 结束并开始处理。\n"
+        "4. 发送 /clear 清空队列。"
     )
 
 async def set_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,7 +55,7 @@ async def set_mode(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if user_id not in user_data:
-        user_data[user_id] = {'mode': 'vertical', 'files': []}
+        user_data[user_id] = {'mode': 'album', 'files': []}
     
     user_data[user_id]['mode'] = mode
     await update.message.reply_text(f"✅ 模式已切换为: {mode}")
@@ -82,7 +81,7 @@ async def handle_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if user_id not in user_data:
-        user_data[user_id] = {'mode': 'vertical', 'files': []}
+        user_data[user_id] = {'mode': 'album', 'files': []}
     
     # 获取文件对象
     if update.message.photo:
@@ -124,24 +123,37 @@ async def merge_media(update: Update, context: ContextTypes.DEFAULT_TYPE):
     files = user_data[user_id]['files']
     mode = user_data[user_id]['mode']
     
-    await update.message.reply_text(f"⏳ 正在处理 {len(files)} 个文件，请稍候...\n(视频合并可能需要较长时间)")
+    await update.message.reply_text(f"⏳ 正在处理 {len(files)} 个文件，请稍候...")
     
     try:
-        # 调用合并逻辑
-        output_path = merger.process_media(files, mode)
-        
-        if output_path and os.path.exists(output_path):
-            # 发送结果
-            await update.message.reply_text("✅ 合并成功，正在上传...")
+        if mode == 'album':
+            # 相册模式：直接发送 Media Group
+            media_group = []
+            for f in files:
+                if f.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                    media_group.append(InputMediaPhoto(open(f, 'rb')))
+                elif f.lower().endswith(('.mp4', '.mov', '.avi')):
+                    media_group.append(InputMediaVideo(open(f, 'rb')))
             
-            if output_path.endswith('.mp4'):
-                await update.message.reply_video(output_path)
-            else:
-                await update.message.reply_photo(output_path)
-                # 如果是长图，可能需要发 document 避免压缩
-                # await update.message.reply_document(output_path, caption="原图")
+            # 分批发送，每批最多 10 个
+            for i in range(0, len(media_group), 10):
+                chunk = media_group[i:i+10]
+                await update.message.reply_media_group(media=chunk)
+            
+            await update.message.reply_text("✅ 发送完成！")
+            
         else:
-            await update.message.reply_text("❌ 合并失败，可能是文件格式不支持或损坏。")
+            # 拼接模式：调用 merger
+            output_path = merger.process_media(files, mode)
+            
+            if output_path and os.path.exists(output_path):
+                await update.message.reply_text("✅ 拼接成功，正在上传...")
+                if output_path.endswith('.mp4'):
+                    await update.message.reply_video(output_path)
+                else:
+                    await update.message.reply_photo(output_path)
+            else:
+                await update.message.reply_text("❌ 合并失败，可能是文件格式不支持或损坏。")
             
     except Exception as e:
         logging.error(f"Merge error: {e}")
@@ -171,7 +183,7 @@ if __name__ == '__main__':
     application = ApplicationBuilder().token(config.BOT_TOKEN).build()
     
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler(['vertical', 'horizontal', 'long'], set_mode))
+    application.add_handler(CommandHandler(['vertical', 'horizontal', 'long', 'album'], set_mode))
     application.add_handler(CommandHandler('end', merge_media))
     application.add_handler(CommandHandler('clear', clear_queue))
     # 处理图片、视频、文档
