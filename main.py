@@ -43,8 +43,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 欢迎使用合并机器人！\n\n"
         "🛠 **使用说明**:\n"
-        "1. **默认模式**: 直接发送多张图片/视频，我把它们打包成一个相册发送。\n"
-        "2. **拼接模式**: 发送 /vertical (垂直) 或 /horizontal (水平) 可切换到长图拼接模式。\n"
+        "1. **默认模式 (相册)**: 发送 /album 切换回此模式。直接发送多张图片，打包发送。\n"
+        "2. **拼接模式**: 发送 /vertical (垂直) 或 /horizontal (水平) 切换到长图拼接。\n"
         "3. 发送 /end 结束并开始处理。\n"
         "4. 发送 /clear 清空队列。"
     )
