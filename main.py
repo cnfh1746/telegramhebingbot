@@ -1,6 +1,8 @@
 import logging
 import os
 import shutil
+import threading
+from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 import config
@@ -15,6 +17,19 @@ logging.basicConfig(
 # 临时存储用户数据 (实际生产中建议使用 Redis)
 # 结构: {user_id: {'mode': 'vertical', 'files': ['path1', 'path2']}}
 user_data = {}
+
+# === 保活 Web Server ===
+app = Flask(__name__)
+
+@app.route('/')
+def health_check():
+    return "Bot is alive!", 200
+
+def run_web_server():
+    # 获取环境变量中的端口 (Koyeb/Render 会提供 PORT)
+    port = int(os.environ.get('PORT', 8000))
+    app.run(host='0.0.0.0', port=port)
+# =======================
 
 def get_user_temp_dir(user_id):
     """获取用户的临时目录路径"""
@@ -149,6 +164,9 @@ if __name__ == '__main__':
     # 确保根临时目录存在
     if not os.path.exists(config.TEMP_DIR):
         os.makedirs(config.TEMP_DIR)
+
+    # 启动 Web Server 用于保活
+    threading.Thread(target=run_web_server, daemon=True).start()
 
     application = ApplicationBuilder().token(config.BOT_TOKEN).build()
     
